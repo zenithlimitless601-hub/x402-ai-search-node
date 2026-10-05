@@ -5,10 +5,9 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-// Make sure this is set to your actual Coinbase Wallet address in Render Environment Variables
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
 
-// Public Homepage (Render Health Check)
+// 1. Health Check
 app.get('/', (req, res) => {
   res.json({
     status: "online",
@@ -18,33 +17,112 @@ app.get('/', (req, res) => {
   });
 });
 
-// Protected Endpoint with Native x402 V2 Specs
+// 2. OpenAPI Spec Endpoint (Strict OpenAPI 3.0 Schema for Bazaar)
+app.get('/openapi.json', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol;
+
+  res.json({
+    openapi: "3.0.0",
+    info: {
+      title: "x402 AI Web Search Service",
+      description: "Real-time web search synthesis paid via x402 micropayments on Base.",
+      version: "1.0.0"
+    },
+    servers: [
+      {
+        url: `${protocol}://${host}`,
+        description: "Production Server"
+      }
+    ],
+    paths: {
+      "/api/v1/search": {
+        post: {
+          summary: "Execute AI Web Search",
+          operationId: "executeSearch",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["query"],
+                  properties: {
+                    query: {
+                      type: "string",
+                      description: "Search query string",
+                      example: "latest crypto market news"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Search results retrieved successfully",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      query: { type: "string" },
+                      timestamp: { type: "string" },
+                      data: {
+                        type: "object",
+                        properties: {
+                          summary: { type: "string" },
+                          raw_snippet: { type: "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "402": {
+              description: "Payment Required ($0.002 USDC on Base)"
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+// 3. Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
   const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'];
 
-  // Send 402 Payment Required if no payment header exists
   if (!paymentHeader) {
     const paySpec = {
       x402Version: 2,
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453", // Official CAIP-2 ID for Base Mainnet
-          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Native USDC
-          price: "$0.002",
-          payTo: RECEIVING_WALLET
+          network: "eip155:8453",
+          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          amount: "2000",
+          payTo: RECEIVING_WALLET,
+          maxTimeoutSeconds: 60,
+          extra: {
+            name: "USD Coin",
+            version: "2"
+          }
         }
       ],
       resource: {
         url: `${req.protocol}://${req.get('host')}/api/v1/search`,
-        description: "Real-time AI Web Search Feed"
+        description: "Real-time AI Web Search & Synthesis"
       }
     };
 
-    // Encode spec into base64 as required by x402 V2
-    const encodedHeader = Buffer.from(JSON.stringify(paySpec)).toString('base64');
+    const encodedHeader = Buffer.from(JSON.stringify(paySpec), 'utf-8').toString('base64');
 
     res.setHeader('PAYMENT-REQUIRED', encodedHeader);
+    res.setHeader('Access-Control-Expose-Headers', 'PAYMENT-REQUIRED');
+    
     return res.status(402).json({
       x402Version: 2,
       error: "Payment Required",
@@ -53,7 +131,6 @@ app.post('/api/v1/search', async (req, res) => {
     });
   }
 
-  // Service execution after payment header is attached
   try {
     const { query } = req.body;
     if (!query) {
@@ -81,43 +158,6 @@ app.post('/api/v1/search', async (req, res) => {
   }
 });
 
-// Public OpenAPI schema for Bazaar indexing
-app.get('/openapi.json', (req, res) => {
-  res.json({
-    openapi: "3.0.0",
-    info: {
-      title: "x402 High-Volume AI Web Search API",
-      version: "1.0.0",
-      description: "Real-time web search synthesis paid via x402 micropayments on Base."
-    },
-    paths: {
-      "/api/v1/search": {
-        post: {
-          summary: "Search web and return structured snippets",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    query: { type: "string", example: "latest AI news" }
-                  },
-                  required: ["query"]
-                }
-              }
-            }
-          },
-          responses: {
-            "200": { description: "Successful Search Result" },
-            "402": { description: "Payment Required ($0.002 USDC)" }
-          }
-        }
-      }
-    }
-  });
-});
-
 app.listen(PORT, () => {
-  console.log(`x402 Server running on port ${PORT}`);
+  console.log(`x402 Server online on port ${PORT}`);
 });
