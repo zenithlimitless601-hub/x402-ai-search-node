@@ -81,6 +81,43 @@ app.post('/api/v1/search', async (req, res) => {
   }
 });
 
+// Public OpenAPI schema for Bazaar indexing
+app.get('/openapi.json', (req, res) => {
+  res.json({
+    openapi: "3.0.0",
+    info: {
+      title: "x402 High-Volume AI Web Search API",
+      version: "1.0.0",
+      description: "Real-time web search synthesis paid via x402 micropayments on Base."
+    },
+    paths: {
+      "/api/v1/search": {
+        post: {
+          summary: "Search web and return structured snippets",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string", example: "latest AI news" }
+                  },
+                  required: ["query"]
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Successful Search Result" },
+            "402": { description: "Payment Required ($0.002 USDC)" }
+          }
+        }
+      }
+    }
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`x402 Server running on port ${PORT}`);
 });
