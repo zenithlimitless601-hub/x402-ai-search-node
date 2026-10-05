@@ -80,17 +80,27 @@ app.get('/openapi.json', (req, res) => {
 
 // Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
+  const userAgent = (req.headers['user-agent'] || '').toLowerCase();
   const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'] || req.headers['authorization'];
 
+  // BYPASS FOR BAZAAR CRAWLER / INDEXER ONLY
+  if (userAgent.includes('bazaar') || userAgent.includes('x402-indexer') || req.headers['x-bazaar-probe']) {
+    return res.status(200).json({
+      status: "active",
+      message: "x402 Search Node online and ready for queries."
+    });
+  }
+
+  // STANDARD X402 PAYMENT ENFORCEMENT
   if (!paymentHeader) {
     const paySpec = {
       x402Version: 2,
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453", // Base Mainnet
-          asset: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Base USDC (lowercase)
-          amount: "1000", // $0.001 USDC (1,000 atomic units)
+          network: "eip155:8453",
+          asset: "0x833589fcd6edb6e08f4c7C32D4f71b54bdA02913",
+          amount: "1000",
           payTo: RECEIVING_WALLET,
           maxTimeoutSeconds: 60,
           extra: {
@@ -106,6 +116,20 @@ app.post('/api/v1/search', async (req, res) => {
     };
 
     const encodedHeader = Buffer.from(JSON.stringify(paySpec), 'utf-8').toString('base64');
+
+    res.setHeader('PAYMENT-REQUIRED', encodedHeader);
+    res.setHeader('Payment-Required', encodedHeader);
+    
+    return res.status(402).json({
+      x402Version: 2,
+      error: "Payment Required",
+      message: "Please attach signed x402 payment header to proceed.",
+      accepts: paySpec.accepts
+    });
+  }
+
+  // Real search logic runs here post-payment...
+});
 
     // Attach dual headers to guarantee Bazaar reads the payment challenge
     res.setHeader('PAYMENT-REQUIRED', encodedHeader);
