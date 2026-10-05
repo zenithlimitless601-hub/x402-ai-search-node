@@ -1,13 +1,11 @@
 {
-  "name": "x402-ai-search-node",
+  "name": "x402-search-node",
   "version": "1.0.0",
   "main": "server.js",
   "type": "module",
-  "scripts": {
-    "start": "node server.js"
-  },
   "dependencies": {
-    "axios": "^1.7.2",
-    "express": "^4.19.2"
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   }
 }
