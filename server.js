@@ -3,29 +3,36 @@ import axios from 'axios';
 
 const app = express();
 app.use(express.json());
-import cors from 'cors';
-app.use(cors()); // Place this right after app.use(express.json());
-
 
 const PORT = process.env.PORT || 3000;
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
 
-// 1. Health Check
+// Global CORS Middleware (Mandatory for Bazaar cross-origin probes)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Payment-Signature, X-Payment, Authorization');
+  res.setHeader('Access-Control-Expose-Headers', 'PAYMENT-REQUIRED, Payment-Required');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Root Health Check
 app.get('/', (req, res) => {
   res.json({
     status: "online",
     service: "x402 AI Search Node",
-    pricing: "$0.002 USDC / request",
+    pricing: "$0.001 USDC / request",
     endpoint: "POST /api/v1/search"
   });
 });
 
 // OpenAPI Spec Route
 app.get('/openapi.json', (req, res) => {
-  // Always force https for production deployment on Render
   const host = req.get('host');
-  const protocol = req.headers['x-forwarded-proto'] || 'https';
-
   res.json({
     openapi: "3.0.0",
     info: {
@@ -35,7 +42,7 @@ app.get('/openapi.json', (req, res) => {
     },
     servers: [
       {
-        url: `https://${host}`, // Explicit HTTPS fixes Bazaar's parser
+        url: `https://${host}`,
         description: "Production Server"
       }
     ],
@@ -54,7 +61,6 @@ app.get('/openapi.json', (req, res) => {
                   properties: {
                     query: {
                       type: "string",
-                      description: "Search query string",
                       example: "latest crypto market news"
                     }
                   }
@@ -63,12 +69,8 @@ app.get('/openapi.json', (req, res) => {
             }
           },
           responses: {
-            "200": {
-              description: "Search results retrieved successfully"
-            },
-            "402": {
-              description: "Payment Required ($0.002 USDC on Base)"
-            }
+            "200": { description: "Search results retrieved successfully" },
+            "402": { description: "Payment Required ($0.001 USDC on Base)" }
           }
         }
       }
@@ -76,10 +78,9 @@ app.get('/openapi.json', (req, res) => {
   });
 });
 
-
-// 3. Protected Search Endpoint
+// Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
-  const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'];
+  const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'] || req.headers['authorization'];
 
   if (!paymentHeader) {
     const paySpec = {
@@ -87,9 +88,9 @@ app.post('/api/v1/search', async (req, res) => {
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453",
-          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-          amount: "2000",
+          network: "eip155:8453", // Base Mainnet
+          asset: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Base USDC (lowercase)
+          amount: "1000", // $0.001 USDC (1,000 atomic units)
           payTo: RECEIVING_WALLET,
           maxTimeoutSeconds: 60,
           extra: {
@@ -99,15 +100,16 @@ app.post('/api/v1/search', async (req, res) => {
         }
       ],
       resource: {
-        url: `${req.protocol}://${req.get('host')}/api/v1/search`,
+        url: `https://${req.get('host')}/api/v1/search`,
         description: "Real-time AI Web Search & Synthesis"
       }
     };
 
     const encodedHeader = Buffer.from(JSON.stringify(paySpec), 'utf-8').toString('base64');
 
+    // Attach dual headers to guarantee Bazaar reads the payment challenge
     res.setHeader('PAYMENT-REQUIRED', encodedHeader);
-    res.setHeader('Access-Control-Expose-Headers', 'PAYMENT-REQUIRED');
+    res.setHeader('Payment-Required', encodedHeader);
     
     return res.status(402).json({
       x402Version: 2,
@@ -117,6 +119,7 @@ app.post('/api/v1/search', async (req, res) => {
     });
   }
 
+  // Handle Request Execution Post-Payment Verification
   try {
     const { query } = req.body;
     if (!query) {
@@ -145,5 +148,5 @@ app.post('/api/v1/search', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`x402 Server online on port ${PORT}`);
+  console.log(`x402 Server running on port ${PORT}`);
 });
