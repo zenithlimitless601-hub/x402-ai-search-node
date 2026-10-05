@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@x402/core": "^2.0.0",
-    "@x402/express": "^0.1.0",
+    "@x402/express": "^2.0.0",
     "axios": "^1.7.2",
     "express": "^4.19.2"
   }
