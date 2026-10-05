@@ -3,6 +3,9 @@ import axios from 'axios';
 
 const app = express();
 app.use(express.json());
+import cors from 'cors';
+app.use(cors()); // Place this right after app.use(express.json());
+
 
 const PORT = process.env.PORT || 3000;
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
