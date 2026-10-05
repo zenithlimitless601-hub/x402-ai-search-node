@@ -1,11 +1,11 @@
 import express from 'express';
 import axios from 'axios';
-import { paymentMiddleware } from '@x402/express';
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+// Make sure this is set to your actual Coinbase Wallet address in Render Environment Variables
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
 
 // Public Homepage (Render Health Check)
@@ -18,22 +18,42 @@ app.get('/', (req, res) => {
   });
 });
 
-// Configure official x402 V2 Paywall
-app.use(
-  paymentMiddleware({
-    payTo: RECEIVING_WALLET,
-    routes: {
-      "POST /api/v1/search": {
-        price: "$0.002",
-        network: "base", // Automatically resolves to Base Mainnet (eip155:8453)
-        description: "Real-time AI Web Search & Synthesis Feed"
-      }
-    }
-  })
-);
-
-// Protected Endpoint
+// Protected Endpoint with Native x402 V2 Specs
 app.post('/api/v1/search', async (req, res) => {
+  const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'];
+
+  // Send 402 Payment Required if no payment header exists
+  if (!paymentHeader) {
+    const paySpec = {
+      x402Version: 2,
+      accepts: [
+        {
+          scheme: "exact",
+          network: "eip155:8453", // Official CAIP-2 ID for Base Mainnet
+          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Native USDC
+          price: "$0.002",
+          payTo: RECEIVING_WALLET
+        }
+      ],
+      resource: {
+        url: `${req.protocol}://${req.get('host')}/api/v1/search`,
+        description: "Real-time AI Web Search Feed"
+      }
+    };
+
+    // Encode spec into base64 as required by x402 V2
+    const encodedHeader = Buffer.from(JSON.stringify(paySpec)).toString('base64');
+
+    res.setHeader('PAYMENT-REQUIRED', encodedHeader);
+    return res.status(402).json({
+      x402Version: 2,
+      error: "Payment Required",
+      message: "Please attach signed x402 payment header to proceed.",
+      accepts: paySpec.accepts
+    });
+  }
+
+  // Service execution after payment header is attached
   try {
     const { query } = req.body;
     if (!query) {
@@ -62,5 +82,5 @@ app.post('/api/v1/search', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`x402 Server online on port ${PORT}`);
+  console.log(`x402 Server running on port ${PORT}`);
 });
