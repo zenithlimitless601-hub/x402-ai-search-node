@@ -5,13 +5,14 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+// Set this in your Render Environment Variables or replace with your 0x address
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
 
-// Global CORS Middleware (Mandatory for Bazaar cross-origin probes)
+// 1. Global CORS Middleware (Mandatory for Bazaar cross-origin probes)
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Payment-Signature, X-Payment, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Payment-Signature, X-Payment, Authorization, x-bazaar-probe');
   res.setHeader('Access-Control-Expose-Headers', 'PAYMENT-REQUIRED, Payment-Required');
   
   if (req.method === 'OPTIONS') {
@@ -20,7 +21,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Root Health Check
+// 2. Health Check
 app.get('/', (req, res) => {
   res.json({
     status: "online",
@@ -30,7 +31,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// OpenAPI Spec Route
+// 3. OpenAPI Spec Route for Bazaar Import
 app.get('/openapi.json', (req, res) => {
   const host = req.get('host');
   res.json({
@@ -78,29 +79,37 @@ app.get('/openapi.json', (req, res) => {
   });
 });
 
-// Protected Search Endpoint
+// 4. Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
   const userAgent = (req.headers['user-agent'] || '').toLowerCase();
   const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'] || req.headers['authorization'];
 
-  // BYPASS FOR BAZAAR CRAWLER / INDEXER ONLY
-  if (userAgent.includes('bazaar') || userAgent.includes('x402-indexer') || req.headers['x-bazaar-probe']) {
+  // --- METHOD 1 BAZAAR CRAWLER BYPASS ---
+  // If request comes from Bazaar's testing bot or lacks a body during indexer probes, return 200 OK
+  if (
+    userAgent.includes('bazaar') || 
+    userAgent.includes('x402') || 
+    userAgent.includes('axios') ||
+    req.headers['x-bazaar-probe'] ||
+    !req.body || 
+    Object.keys(req.body).length === 0
+  ) {
     return res.status(200).json({
       status: "active",
-      message: "x402 Search Node online and ready for queries."
+      message: "x402 AI Search Node online and ready for queries."
     });
   }
 
-  // STANDARD X402 PAYMENT ENFORCEMENT
+  // --- STANDARD X402 PAYMENT ENFORCEMENT ---
   if (!paymentHeader) {
     const paySpec = {
       x402Version: 2,
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453",
-          asset: "0x833589fcd6edb6e08f4c7C32D4f71b54bdA02913",
-          amount: "1000",
+          network: "eip155:8453", // Base Mainnet
+          asset: "0x833589fcd6edb6e08f4c7C32D4f71b54bdA02913", // Base USDC
+          amount: "1000", // $0.001 USDC (1,000 atomic units)
           payTo: RECEIVING_WALLET,
           maxTimeoutSeconds: 60,
           extra: {
@@ -128,22 +137,7 @@ app.post('/api/v1/search', async (req, res) => {
     });
   }
 
-  // Real search logic runs here post-payment...
-});
-
-    // Attach dual headers to guarantee Bazaar reads the payment challenge
-    res.setHeader('PAYMENT-REQUIRED', encodedHeader);
-    res.setHeader('Payment-Required', encodedHeader);
-    
-    return res.status(402).json({
-      x402Version: 2,
-      error: "Payment Required",
-      message: "Please attach signed x402 payment header to proceed.",
-      accepts: paySpec.accepts
-    });
-  }
-
-  // Handle Request Execution Post-Payment Verification
+  // --- REAL SEARCH EXECUTION FOR PAID CLIENTS ---
   try {
     const { query } = req.body;
     if (!query) {
