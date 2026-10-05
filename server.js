@@ -8,32 +8,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x0000000000000000000000000000000000000000";
 
-// Configure x402 Micropayment Paywall & Bazaar Auto-Discovery Metadata
-app.use(
-  paymentMiddleware(RECEIVING_WALLET, {
-    "POST /api/v1/search": {
-      price: "$0.002", // $0.002 USDC per query (High volume pricing)
-      network: "base",  // Base Mainnet (0% or near-zero gas)
-      description: "Real-time AI Agent Web Search & Markdown Extraction Feed",
-      // Bazaar Registry Auto-Discovery Extension
-      extensions: {
-        bazaar: {
-          category: "search_and_scraping",
-          tags: ["web-search", "ai-agent", "realtime-data", "markdown-scraper"],
-          inputSchema: {
-            type: "object",
-            properties: {
-              query: { type: "string", description: "Search term or URL to scrape" }
-            },
-            required: ["query"]
-          }
-        }
-      }
-    }
-  })
-);
-
-// Public Health Check Endpoint
+// Public Homepage (Render checks this to verify your app is healthy)
 app.get('/', (req, res) => {
   res.json({
     status: "online",
@@ -43,7 +18,18 @@ app.get('/', (req, res) => {
   });
 });
 
-// Protected High-Demand Endpoint (Executes post-payment settlement)
+// Configure x402 Micropayment Paywall
+app.use(
+  paymentMiddleware(RECEIVING_WALLET, {
+    "POST /api/v1/search": {
+      price: "$0.002",
+      network: "base",
+      description: "Real-time AI Agent Web Search Feed"
+    }
+  })
+);
+
+// Protected Endpoint
 app.post('/api/v1/search', async (req, res) => {
   try {
     const { query } = req.body;
@@ -51,7 +37,6 @@ app.post('/api/v1/search', async (req, res) => {
       return res.status(400).json({ error: "Missing 'query' in request body." });
     }
 
-    // High-demand service: Fetch, clean, and structure real-time search data
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const response = await axios.get(searchUrl, {
       headers: {
@@ -59,15 +44,13 @@ app.post('/api/v1/search', async (req, res) => {
       }
     });
 
-    // Extract quick results for AI agent parsing
     res.json({
       success: true,
       query: query,
       timestamp: new Date().toISOString(),
-      format: "structured_json",
       data: {
-        summary: `Real-time search results synthesized for query: ${query}`,
-        raw_html_snippet: response.data.substring(0, 1500) // Returns fast payload
+        summary: `Search results synthesized for: ${query}`,
+        raw_html_snippet: response.data.substring(0, 1500)
       }
     });
   } catch (err) {
@@ -76,5 +59,5 @@ app.post('/api/v1/search', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`High-Volume x402 Node running on port ${PORT}`);
+  console.log(`x402 Server successfully started on port ${PORT}`);
 });
