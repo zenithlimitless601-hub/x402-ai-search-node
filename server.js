@@ -17,10 +17,11 @@ app.get('/', (req, res) => {
   });
 });
 
-// 2. OpenAPI Spec Endpoint (Strict OpenAPI 3.0 Schema for Bazaar)
+// OpenAPI Spec Route
 app.get('/openapi.json', (req, res) => {
+  // Always force https for production deployment on Render
   const host = req.get('host');
-  const protocol = req.protocol;
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
 
   res.json({
     openapi: "3.0.0",
@@ -31,7 +32,7 @@ app.get('/openapi.json', (req, res) => {
     },
     servers: [
       {
-        url: `${protocol}://${host}`,
+        url: `https://${host}`, // Explicit HTTPS fixes Bazaar's parser
         description: "Production Server"
       }
     ],
@@ -60,26 +61,7 @@ app.get('/openapi.json', (req, res) => {
           },
           responses: {
             "200": {
-              description: "Search results retrieved successfully",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      success: { type: "boolean" },
-                      query: { type: "string" },
-                      timestamp: { type: "string" },
-                      data: {
-                        type: "object",
-                        properties: {
-                          summary: { type: "string" },
-                          raw_snippet: { type: "string" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+              description: "Search results retrieved successfully"
             },
             "402": {
               description: "Payment Required ($0.002 USDC on Base)"
@@ -90,6 +72,7 @@ app.get('/openapi.json', (req, res) => {
     }
   });
 });
+
 
 // 3. Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
