@@ -6,7 +6,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 // Set this in your Render Environment Variables or replace with your 0x address
-const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0x6b2fdae695461252064B6F8AE41747ead71cD399";
+const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0xA69d6964d7422aaac8191a351236Fa3a8bF8E127";
 
 // 1. Global CORS Middleware (Mandatory for Bazaar cross-origin probes)
 app.use((req, res, next) => {
