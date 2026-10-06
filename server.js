@@ -5,10 +5,14 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-// Set this in your Render Environment Variables or replace with your 0x address
-const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0xA69d6964d7422aaac8191a351236Fa3a8bF8E127";
 
-// 1. Global CORS Middleware (Mandatory for Bazaar cross-origin probes)
+// Set your receiving wallet address via environment variable or replace default fallback
+const RECEIVING_WALLET = process.env.RECEIVING_WALLET || "0xa69d6964d7422aaac8191a351236fa3a8bf8e127";
+
+// -----------------------------------------------------------------------------
+// 1. GLOBAL CORS MIDDLEWARE
+// Explicitly exposes payment headers for cross-origin Web3 indexers & crawlers
+// -----------------------------------------------------------------------------
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -21,29 +25,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. Health Check
+// -----------------------------------------------------------------------------
+// 2. HEALTH CHECK ROUTE
+// -----------------------------------------------------------------------------
 app.get('/', (req, res) => {
   res.json({
     status: "online",
     service: "x402 AI Search Node",
-    pricing: "$0.001 USDC / request",
+    pricing: "$0.002 USDC / request",
     endpoint: "POST /api/v1/search"
   });
 });
 
-// 3. OpenAPI Spec Route for Bazaar Import
+// -----------------------------------------------------------------------------
+// 3. OPENAPI SPECIFICATION ROUTE
+// Direct schema endpoint for Bazaar, Agentic.Market, and x402-list importers
+// -----------------------------------------------------------------------------
 app.get('/openapi.json', (req, res) => {
-  const host = req.get('host');
   res.json({
     openapi: "3.0.0",
     info: {
       title: "x402 AI Web Search Service",
-      description: "Real-time web search synthesis paid via x402 micropayments on Base.",
+      description: "Real-time web search synthesis paid via x402 USDC micropayments on Base Mainnet.",
       version: "1.0.0"
     },
     servers: [
       {
-        url: `https://${host}`,
+        url: "https://x402-ai-search-node-1.onrender.com",
         description: "Production Server"
       }
     ],
@@ -71,7 +79,7 @@ app.get('/openapi.json', (req, res) => {
           },
           responses: {
             "200": { description: "Search results retrieved successfully" },
-            "402": { description: "Payment Required ($0.001 USDC on Base)" }
+            "402": { description: "Payment Required ($0.002 USDC on Base)" }
           }
         }
       }
@@ -79,19 +87,26 @@ app.get('/openapi.json', (req, res) => {
   });
 });
 
-// 4. Protected Search Endpoint
+// -----------------------------------------------------------------------------
+// 4. PROTECTED SEARCH ENDPOINT
+// -----------------------------------------------------------------------------
 app.post('/api/v1/search', async (req, res) => {
+  // Extract payment header (supports standard x402 casing variations)
   const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'] || req.headers['authorization'];
 
+  // ---------------------------------------------------------------------------
+  // CRITICAL STEP 1: PAYMENT CHALLENGE CHECK
+  // Always trigger 402 challenge first BEFORE checking body or parameters!
+  // ---------------------------------------------------------------------------
   if (!paymentHeader) {
     const paySpec = {
       x402Version: 2,
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453",
-          asset: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Strict lowercase
-          amount: "1000",
+          network: "eip155:8453", // Base Mainnet CAIP-2 ID
+          asset: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Base USDC (lowercase)
+          amount: "2000", // $0.002 USDC in atomic units (6 decimals)
           payTo: RECEIVING_WALLET,
           maxTimeoutSeconds: 60,
           extra: {
@@ -106,8 +121,10 @@ app.post('/api/v1/search', async (req, res) => {
       }
     };
 
+    // Encode exact UTF-8 Base64 JSON string
     const encodedHeader = Buffer.from(JSON.stringify(paySpec), 'utf-8').toString('base64');
 
+    // Dual header assignment to guarantee reader compatibility
     res.setHeader('PAYMENT-REQUIRED', encodedHeader);
     res.setHeader('Payment-Required', encodedHeader);
     
@@ -119,20 +136,22 @@ app.post('/api/v1/search', async (req, res) => {
     });
   }
 
-  // Handle request logic after valid payment...
-});
+  // ---------------------------------------------------------------------------
+  // STEP 2: BODY VALIDATION (Only runs after payment header is supplied)
+  // ---------------------------------------------------------------------------
+  const { query } = req.body || {};
+  if (!query) {
+    return res.status(400).json({ error: "Missing 'query' parameter in request body." });
+  }
 
-  // --- REAL SEARCH EXECUTION FOR PAID CLIENTS ---
+  // ---------------------------------------------------------------------------
+  // STEP 3: SEARCH EXECUTION
+  // ---------------------------------------------------------------------------
   try {
-    const { query } = req.body;
-    if (!query) {
-      return res.status(400).json({ error: "Missing 'query' parameter in request body." });
-    }
-
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const response = await axios.get(searchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
 
@@ -150,6 +169,7 @@ app.post('/api/v1/search', async (req, res) => {
   }
 });
 
+// Start Server
 app.listen(PORT, () => {
-  console.log(`x402 Server running on port ${PORT}`);
+  console.log(`x402 AI Search Node active on port ${PORT}`);
 });
