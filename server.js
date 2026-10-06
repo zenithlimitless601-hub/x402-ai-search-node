@@ -81,35 +81,17 @@ app.get('/openapi.json', (req, res) => {
 
 // 4. Protected Search Endpoint
 app.post('/api/v1/search', async (req, res) => {
-  const userAgent = (req.headers['user-agent'] || '').toLowerCase();
   const paymentHeader = req.headers['payment-signature'] || req.headers['x-payment'] || req.headers['authorization'];
 
-  // --- METHOD 1 BAZAAR CRAWLER BYPASS ---
-  // If request comes from Bazaar's testing bot or lacks a body during indexer probes, return 200 OK
-  if (
-    userAgent.includes('bazaar') || 
-    userAgent.includes('x402') || 
-    userAgent.includes('axios') ||
-    req.headers['x-bazaar-probe'] ||
-    !req.body || 
-    Object.keys(req.body).length === 0
-  ) {
-    return res.status(200).json({
-      status: "active",
-      message: "x402 AI Search Node online and ready for queries."
-    });
-  }
-
-  // --- STANDARD X402 PAYMENT ENFORCEMENT ---
   if (!paymentHeader) {
     const paySpec = {
       x402Version: 2,
       accepts: [
         {
           scheme: "exact",
-          network: "eip155:8453", // Base Mainnet
-          asset: "0x833589fcd6edb6e08f4c7C32D4f71b54bdA02913", // Base USDC
-          amount: "1000", // $0.001 USDC (1,000 atomic units)
+          network: "eip155:8453",
+          asset: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // Strict lowercase
+          amount: "1000",
           payTo: RECEIVING_WALLET,
           maxTimeoutSeconds: 60,
           extra: {
@@ -119,7 +101,7 @@ app.post('/api/v1/search', async (req, res) => {
         }
       ],
       resource: {
-        url: `https://${req.get('host')}/api/v1/search`,
+        url: "https://x402-ai-search-node-1.onrender.com/api/v1/search",
         description: "Real-time AI Web Search & Synthesis"
       }
     };
@@ -136,6 +118,9 @@ app.post('/api/v1/search', async (req, res) => {
       accepts: paySpec.accepts
     });
   }
+
+  // Handle request logic after valid payment...
+});
 
   // --- REAL SEARCH EXECUTION FOR PAID CLIENTS ---
   try {
